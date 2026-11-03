@@ -1,1 +1,728 @@
-213
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>연료 모으기 (Fuel Collector)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 터치 및 기본 선택 방지 스타일 */
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #0f172a;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        /* 캔버스 및 콘테이너 세로형 유지 */
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 420px;
+            height: 100vh;
+            max-height: 750px;
+            margin: 0 auto;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        /* 도로 배경 설정 */
+        .road-bg {
+            background-color: #334155;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* 무한 도로 주행 애니메이션 컨테이너 */
+        .road-lines-container {
+            position: absolute;
+            top: -90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: calc(100% + 180px);
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            animation: roadScroll 0.8s linear infinite;
+        }
+
+        .road-line {
+            width: 100%;
+            height: 50px;
+            background-color: #f1f5f9;
+            border-radius: 4px;
+            opacity: 0.6;
+            flex-shrink: 0;
+        }
+
+        @keyframes roadScroll {
+            0% {
+                transform: translateX(-50%) translateY(-90px);
+            }
+            100% {
+                transform: translateX(-50%) translateY(0px);
+            }
+        }
+
+        /* 연료 경고 깜빡임 애니메이션 */
+        @keyframes fuelWarningPulse {
+            0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8)); }
+            50% { opacity: 0.4; filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.3)); }
+        }
+
+        .fuel-warning {
+            background-color: #ef4444 !important;
+            animation: fuelWarningPulse 0.6s infinite ease-in-out !important;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen bg-slate-950 p-0 sm:p-4">
+
+    <div class="game-container flex flex-col justify-between">
+        <!-- Start Overlays (시작 안내 화면) -->
+        <div id="start-screen" class="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-xs flex flex-col items-center">
+                <!-- 1. 상단 디자인 간소화 -->
+                <h1 class="text-2xl font-black text-white mb-6 tracking-tight">🚗 연료 모으기</h1>
+
+                <!-- 2. 아이템 설명 간소화 (한 줄 목록 형태) -->
+                <div class="w-full space-y-3 mb-6 text-left">
+                    <!-- ⛽ 연료통 -->
+                    <div class="flex items-center gap-2.5 text-sm">
+                        <span class="text-lg shrink-0">⛽</span>
+                        <span class="font-bold text-emerald-400 shrink-0">연료통</span>
+                        <span class="text-slate-500 font-semibold text-xs">—</span>
+                        <span class="text-slate-300 text-xs truncate">연료 충전 · +1점</span>
+                    </div>
+
+                    <!-- ⚡ 번개 -->
+                    <div class="flex items-center gap-2.5 text-sm">
+                        <span class="text-lg shrink-0">⚡</span>
+                        <span class="font-bold text-amber-400 shrink-0">번개</span>
+                        <span class="text-slate-500 font-semibold text-xs">—</span>
+                        <span class="text-slate-300 text-xs truncate">5초간 연료 절약</span>
+                    </div>
+
+                    <!-- 🔩 못 장애물 -->
+                    <div class="flex items-center gap-2.5 text-sm">
+                        <span class="text-lg shrink-0">🔩</span>
+                        <span class="font-bold text-rose-400 shrink-0">못 장애물</span>
+                        <span class="text-slate-500 font-semibold text-xs">—</span>
+                        <span class="text-slate-300 text-xs truncate">연료 -20%</span>
+                    </div>
+                </div>
+
+                <!-- 3. 게임 조작 안내 축소 -->
+                <p class="text-[11px] text-slate-400 mb-6 text-center font-medium">
+                    ← → 방향키 / 좌우 버튼으로 이동
+                </p>
+
+                <!-- 4. 게임 시작 버튼 -->
+                <button id="start-btn" class="w-full py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-extrabold text-base rounded-xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>게임 시작</span> <span>▶</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 게임 종료 화면 (GAME OVER) -->
+        <div id="game-over-screen" class="hidden absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+            <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-2xl w-full max-w-xs flex flex-col items-center">
+                <h2 class="text-3xl font-black text-rose-500 mb-2 tracking-tight">GAME OVER</h2>
+                <p class="text-sm text-slate-400 mb-6">게임이 종료되었습니다!</p>
+                
+                <div class="bg-slate-800/80 rounded-xl p-4 w-full mb-6 border border-slate-700/50">
+                    <div class="text-xs text-slate-400 mb-1 font-semibold">획득한 연료통</div>
+                    <div id="final-score" class="text-4xl font-black text-amber-400">0개</div>
+                </div>
+
+                <button id="restart-btn" class="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-base rounded-xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <span>다시 시작</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Top UI Bar (연료 게이지 & 점수 & 시간) -->
+        <div class="relative z-10 bg-slate-900/90 backdrop-blur border-b border-slate-800 p-4 space-y-3">
+            <div class="flex justify-between items-center text-sm font-bold">
+                <div class="flex items-center gap-1.5 text-emerald-400">
+                    <span>⛽</span>
+                    <span id="score-text" class="text-base font-black text-white">0</span>
+                    <span class="text-xs text-slate-400 font-normal">개</span>
+                </div>
+                <div id="boost-indicator" class="hidden text-xs font-bold text-amber-400 animate-pulse bg-amber-400/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+                    ⚡ 50% 절약 중
+                </div>
+                <div class="flex items-center gap-1 text-slate-400">
+                    <span>⏱️</span>
+                    <span id="timer-text" class="font-mono font-bold text-white">60</span>
+                    <span class="text-xs">초</span>
+                </div>
+            </div>
+
+            <!-- 연료 게이지 바 -->
+            <div class="w-full bg-slate-800 h-4 rounded-full overflow-hidden p-0.5 border border-slate-700/50 relative">
+                <div id="fuel-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-150 ease-out" style="width: 100%;"></div>
+                <!-- 1. 연료 게이지 중앙 정수 숫자 표시 (0~100) -->
+                <div class="absolute inset-0 flex items-center justify-center font-black text-[11px] text-white tracking-wider drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] pointer-events-none">
+                    <span id="fuel-text">100</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Game Canvas (도로 및 플레이어 영역) -->
+        <div class="relative flex-1 w-full overflow-hidden" id="canvas-container">
+            <!-- 무한 스크롤 도로 차선 -->
+            <div class="road-bg">
+                <div class="road-lines-container">
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                    <div class="road-line"></div>
+                </div>
+            </div>
+            <!-- 게임 캔버스 -->
+            <canvas id="gameCanvas" class="relative z-10 w-full h-full block"></canvas>
+        </div>
+
+        <!-- Bottom Touch Controls (모바일 이동 버튼) -->
+        <div class="relative z-10 bg-slate-900 border-t border-slate-800 p-4 flex justify-between gap-4">
+            <button id="btn-left" class="flex-1 py-4 bg-slate-800 active:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center text-2xl active:scale-95 transition shadow-lg">
+                ⬅️
+            </button>
+            <button id="btn-right" class="flex-1 py-4 bg-slate-800 active:bg-slate-700 border border-slate-700 rounded-xl flex items-center justify-center text-2xl active:scale-95 transition shadow-lg">
+                ➡️
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // DOM 요소 정의
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const canvasContainer = document.getElementById('canvas-container');
+        
+        // 연료 회복량 상수 설정 (10으로 통일)
+        const FUEL_RECOVERY = 10;
+        
+        const fuelBar = document.getElementById('fuel-bar');
+        const fuelText = document.getElementById('fuel-text');
+        const scoreText = document.getElementById('score-text');
+        const timerText = document.getElementById('timer-text');
+        const finalScoreText = document.getElementById('final-score');
+        const boostIndicator = document.getElementById('boost-indicator');
+        
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const btnLeft = document.getElementById('btn-left');
+        const btnRight = document.getElementById('btn-right');
+
+        // 게임 상태 변수
+        let isPlaying = false;
+        let score = 0;
+        let fuel = 100;
+        let timeLeft = 60;
+        
+        let gameLoopId = null;
+        let timerInterval = null;
+        let fuelInterval = null;
+        let lightningInterval = null;
+        let spikeInterval = null;
+        
+        // 아이템 효과 변수
+        let isBoostActive = false;
+        let boostTimeout = null;
+        
+        // 피격 흔들림 변수
+        let shakeTime = 0;
+
+        // 자동차 객체
+        const car = {
+            x: 0,
+            y: 0,
+            width: 44,
+            height: 75,
+            speed: 6.5,
+            tilt: 0, // 자동차 기울기 (라디안)
+            targetTilt: 0,
+            color: '#3b82f6'
+        };
+
+        // 이동 제어
+        const keys = { left: false, right: false };
+
+        // 게임 오브젝트 목록
+        let items = []; // 연료통, 번개, 못 장애물
+        let particles = []; // 반짝임 효과 파티클
+        let popups = []; // Canvas 텍스트 애니메이션 객체 배열
+
+        // 캔버스 크기 맞춤 설정
+        function resizeCanvas() {
+            canvas.width = canvasContainer.clientWidth;
+            canvas.height = canvasContainer.clientHeight;
+            if (!isPlaying) {
+                car.x = canvas.width / 2 - car.width / 2;
+                car.y = canvas.height - car.height - 25;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // 키보드 조작 이벤트
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'Left') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'Right') keys.right = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'Left') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'Right') keys.right = false;
+        });
+
+        // 모바일 터치 조작 이벤트
+        const setupTouchBtn = (btn, keyName) => {
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyName] = true; });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyName] = false; });
+            btn.addEventListener('mousedown', () => { keys[keyName] = true; });
+            btn.addEventListener('mouseup', () => { keys[keyName] = false; });
+            btn.addEventListener('mouseleave', () => { keys[keyName] = false; });
+        };
+        setupTouchBtn(btnLeft, 'left');
+        setupTouchBtn(btnRight, 'right');
+
+        // 게임 시작/초기화
+        function initGame() {
+            score = 0;
+            fuel = 100;
+            timeLeft = 60;
+            isPlaying = true;
+            items = [];
+            particles = [];
+            popups = []; // 텍스트 애니메이션 배열 초기화
+            isBoostActive = false;
+            shakeTime = 0;
+
+            if (boostTimeout) clearTimeout(boostTimeout);
+            boostIndicator.classList.add('hidden');
+
+            scoreText.textContent = score;
+            timerText.textContent = timeLeft;
+            updateFuelBar();
+
+            resizeCanvas();
+            car.x = canvas.width / 2 - car.width / 2;
+            car.y = canvas.height - car.height - 25;
+            car.tilt = 0;
+            car.targetTilt = 0;
+
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+
+            // 타이머 및 주기적 스폰 설정
+            clearInterval(timerInterval);
+            clearInterval(fuelInterval);
+            clearInterval(lightningInterval);
+            clearInterval(spikeInterval);
+
+            // 60초 타이머
+            timerInterval = setInterval(() => {
+                if (!isPlaying) return;
+                timeLeft--;
+                timerText.textContent = timeLeft;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+
+            // 연료 소모 (0.1초 마다)
+            fuelInterval = setInterval(() => {
+                if (!isPlaying) return;
+                const decreaseRate = isBoostActive ? 0.15 : 0.3; // 번개 아이템 적용 시 감소 속도 절반
+                fuel -= decreaseRate;
+                if (fuel <= 0) {
+                    fuel = 0;
+                    endGame();
+                }
+                updateFuelBar();
+            }, 100);
+
+            // 1.5초마다 연료통 스폰
+            spawnItem('fuel');
+            const fuelSpawnInterval = setInterval(() => {
+                if (!isPlaying) { clearInterval(fuelSpawnInterval); return; }
+                spawnItem('fuel');
+            }, 1500);
+
+            // ~12초 간격 번개 스폰
+            lightningInterval = setInterval(() => {
+                if (!isPlaying) return;
+                spawnItem('lightning');
+            }, 12000);
+
+            // ~6초 간격 못 장애물 스폰
+            spikeInterval = setInterval(() => {
+                if (!isPlaying) return;
+                spawnItem('spike');
+            }, 6000);
+
+            // 메인 루프 실행
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+            gameLoop();
+        }
+
+        // 아이템 생성 함수
+        function spawnItem(type) {
+            const itemWidth = 34;
+            const x = Math.random() * (canvas.width - itemWidth - 30) + 15;
+            let speed = 3.5;
+            if (type === 'lightning') speed = 4.0;
+            if (type === 'spike') speed = 3.8;
+
+            items.push({
+                x: x,
+                y: -40,
+                width: itemWidth,
+                height: itemWidth,
+                speed: speed,
+                type: type
+            });
+        }
+
+        // 연료 게이지 UI 업데이트 및 20% 이하 경고 펄스 효과
+        function updateFuelBar() {
+            const percentage = Math.max(0, Math.min(100, fuel));
+            fuelBar.style.width = `${percentage}%`;
+            // 실시간 0~100 정수 수치 반영
+            fuelText.textContent = Math.round(percentage);
+
+            if (percentage <= 20) {
+                fuelBar.classList.add('fuel-warning');
+            } else {
+                fuelBar.classList.remove('fuel-warning');
+            }
+        }
+
+        // 획득/충돌 피드백 Canvas 텍스트 객체 생성 (충돌 프레임 즉시 호출)
+        function addPopupText(x, y, line1, color1, line2 = null, color2 = null) {
+            popups.push({
+                x: x,
+                y: y - 10,
+                line1: line1,
+                color1: color1,
+                line2: line2,
+                color2: color2,
+                alpha: 1.0,
+                life: 60 // 60 프레임 (약 1초)
+            });
+        }
+
+        // 반짝임 효과 파티클 생성
+        function createSparkles(x, y, color) {
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    size: Math.random() * 4 + 2,
+                    alpha: 1,
+                    color: color
+                });
+            }
+        }
+
+        // 번개 획득 효과 (5초간 연료 절약)
+        function activateLightningBoost() {
+            isBoostActive = true;
+            boostIndicator.classList.remove('hidden');
+            if (boostTimeout) clearTimeout(boostTimeout);
+            boostTimeout = setTimeout(() => {
+                isBoostActive = false;
+                boostIndicator.classList.add('hidden');
+            }, 5000);
+        }
+
+        // 메인 업데이트 및 그리기 루프
+        function gameLoop() {
+            if (!isPlaying) return;
+
+            // 1. 플레이어 위치 및 기울어짐 업데이트
+            let moving = false;
+            if (keys.left) {
+                car.x -= car.speed;
+                car.targetTilt = -0.14; // 약 -8도
+                moving = true;
+            }
+            if (keys.right) {
+                car.x += car.speed;
+                car.targetTilt = 0.14; // 약 +8도
+                moving = true;
+            }
+            if (!moving) {
+                car.targetTilt = 0;
+            }
+
+            // 부드러운 기울기 복원 애니메이션 (Lerp)
+            car.tilt += (car.targetTilt - car.tilt) * 0.2;
+
+            // 벽면 경계 제한
+            const margin = 12;
+            if (car.x < margin) car.x = margin;
+            if (car.x + car.width > canvas.width - margin) car.x = canvas.width - car.width - margin;
+
+            // 화면 흔들림 제어 (못 장애물 피격 시)
+            let shakeOffsetX = 0;
+            let shakeOffsetY = 0;
+            if (shakeTime > 0) {
+                shakeTime--;
+                shakeOffsetX = (Math.random() - 0.5) * 8;
+                shakeOffsetY = (Math.random() - 0.5) * 8;
+            }
+
+            // 캔버스 초기화 및 흔들림 적용
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(shakeOffsetX, shakeOffsetY);
+
+            // 2. 아이템 업데이트 & 충돌 판정
+            for (let i = items.length - 1; i >= 0; i--) {
+                const item = items[i];
+                item.y += item.speed;
+
+                // AABB 충돌 검사
+                if (
+                    car.x < item.x + item.width &&
+                    car.x + car.width > item.x &&
+                    car.y < item.y + item.height &&
+                    car.y + car.height > item.y
+                ) {
+                    // 충돌 처리 즉시 좌표 계산
+                    const centerX = item.x + item.width / 2;
+                    const centerY = item.y + item.height / 2;
+                    const carRoofX = car.x + car.width / 2;
+                    const carRoofY = car.y;
+
+                    if (item.type === 'fuel') {
+                        score += 1;
+                        scoreText.textContent = score;
+
+                        // 실제 연료 회복량 계산 (FUEL_RECOVERY = 10 사용, 최대 100% 보장)
+                        const prevFuel = fuel;
+                        fuel = Math.min(100, fuel + FUEL_RECOVERY);
+                        const actualRecovered = Math.round(fuel - prevFuel);
+
+                        updateFuelBar();
+                        // 충돌 감지 프레임 즉시 Canvas 텍스트 생성 (연료 +10 정확히 표시)
+                        addPopupText(carRoofX, carRoofY, '+1점', '#facc15', `연료 +${actualRecovered}`, '#4ade80');
+                        createSparkles(centerX, centerY, '#4ade80');
+                    } 
+                    else if (item.type === 'lightning') {
+                        activateLightningBoost();
+                        // 충돌 감지 프레임 즉시 Canvas 텍스트 생성
+                        addPopupText(carRoofX, carRoofY, '⚡ 연료 절약 5초!', '#facc15');
+                        createSparkles(centerX, centerY, '#facc15');
+                    } 
+                    else if (item.type === 'spike') {
+                        fuel = Math.max(0, fuel - 20);
+                        updateFuelBar();
+                        shakeTime = 12; // 피격 흔들림
+                        // 충돌 감지 프레임 즉시 Canvas 텍스트 생성
+                        addPopupText(carRoofX, carRoofY, '연료 -20%', '#f87171');
+                        createSparkles(centerX, centerY, '#ef4444');
+                        if (fuel <= 0) endGame();
+                    }
+
+                    items.splice(i, 1);
+                    continue;
+                }
+
+                // 화면 아래로 벗어난 아이템 제거
+                if (item.y > canvas.height + 50) {
+                    items.splice(i, 1);
+                }
+            }
+
+            // 3. 아이템 렌더링
+            items.forEach(item => {
+                ctx.save();
+                ctx.translate(item.x + item.width / 2, item.y + item.height / 2);
+                ctx.font = '26px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                if (item.type === 'fuel') {
+                    ctx.fillText('⛽', 0, 0);
+                } else if (item.type === 'lightning') {
+                    ctx.fillText('⚡', 0, 0);
+                } else if (item.type === 'spike') {
+                    ctx.fillText('🔩', 0, 0);
+                }
+                ctx.restore();
+            });
+
+            // 4. 파티클 애니메이션 렌더링
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= 0.035;
+
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 4-1. Canvas 텍스트 효과 렌더링 (매 프레임 위로 솟구치며 투명해짐)
+            for (let i = popups.length - 1; i >= 0; i--) {
+                const pop = popups[i];
+                pop.y -= 0.65; // 위로 부드럽게 상승 (35~40px)
+                pop.life--;
+                pop.alpha = Math.max(0, pop.life / 60);
+
+                if (pop.life <= 0) {
+                    popups.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = pop.alpha;
+                ctx.textAlign = 'center';
+                ctx.font = '900 15px system-ui, sans-serif';
+
+                // 두꺼운 검은색 그림자/외곽선 렌더링
+                ctx.fillStyle = '#000000';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+                ctx.shadowBlur = 4;
+
+                if (pop.line2) {
+                    // 두 줄 텍스트 렌더링
+                    ctx.fillStyle = pop.color1;
+                    ctx.fillText(pop.line1, pop.x, pop.y - 14);
+                    ctx.fillStyle = pop.color2;
+                    ctx.fillText(pop.line2, pop.x, pop.y);
+                } else {
+                    // 한 줄 텍스트 렌더링
+                    ctx.fillStyle = pop.color1;
+                    ctx.fillText(pop.line1, pop.x, pop.y);
+                }
+                ctx.restore();
+            }
+
+            // 5. 자동차 렌더링
+            ctx.save();
+            ctx.translate(car.x + car.width / 2, car.y + car.height / 2);
+            ctx.rotate(car.tilt);
+
+            // 번개 버프 아우라 효과
+            if (isBoostActive) {
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 16;
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(-car.width / 2 - 4, -car.height / 2 - 4, car.width + 8, car.height + 8, 12);
+                ctx.stroke();
+            }
+
+            // 차체 (주 바디)
+            ctx.fillStyle = car.color;
+            ctx.beginPath();
+            ctx.roundRect(-car.width / 2, -car.height / 2, car.width, car.height, 10);
+            ctx.fill();
+
+            // 유리창 (Front / Rear Glass)
+            ctx.fillStyle = '#93c5fd';
+            ctx.beginPath();
+            ctx.roundRect(-car.width / 2 + 5, -car.height / 2 + 16, car.width - 10, 18, 4);
+            ctx.fill();
+
+            // 지붕 (Roof)
+            ctx.fillStyle = '#1d4ed8';
+            ctx.beginPath();
+            ctx.roundRect(-car.width / 2 + 4, -car.height / 2 + 36, car.width - 8, 22, 4);
+            ctx.fill();
+
+            // 헤드라이트
+            ctx.fillStyle = '#fef08a';
+            ctx.shadowColor = '#fef08a';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(-car.width / 2 + 4, -car.height / 2 + 2, 8, 4);
+            ctx.fillRect(car.width / 2 - 12, -car.height / 2 + 2, 8, 4);
+
+            // 바퀴 4개
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-car.width / 2 - 3, -car.height / 2 + 10, 4, 14);
+            ctx.fillRect(car.width / 2 - 1, -car.height / 2 + 10, 4, 14);
+            ctx.fillRect(-car.width / 2 - 3, car.height / 2 - 24, 4, 14);
+            ctx.fillRect(car.width / 2 - 1, car.height / 2 - 24, 4, 14);
+
+            ctx.restore();
+            ctx.restore(); // Transform translate 복구
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // 게임 종료 처리
+        function endGame() {
+            if (!isPlaying) return;
+            isPlaying = false;
+
+            clearInterval(timerInterval);
+            clearInterval(fuelInterval);
+            clearInterval(lightningInterval);
+            clearInterval(spikeInterval);
+            if (gameLoopId) cancelAnimationFrame(gameLoopId);
+
+            finalScoreText.textContent = `${score}개`;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // 이벤트 리스너 바인딩
+        startBtn.addEventListener('click', () => {
+            initGame();
+        });
+
+        restartBtn.addEventListener('click', () => {
+            gameOverScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+        });
+
+        // 초기 화면 설정
+        window.onload = () => {
+            resizeCanvas();
+        };
+    </script>
+</body>
+</html>
